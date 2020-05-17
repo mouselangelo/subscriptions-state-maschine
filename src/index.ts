@@ -1,4 +1,4 @@
-import { Machine } from "xstate";
+import { Machine, interpret } from "xstate";
 
 interface Context {
   provider?: string;
@@ -38,7 +38,7 @@ type Event =
   | { type: "RETAIN" }
   | { type: "WIN_BACK" };
 
-const maschine = Machine<Context, Schema, Event>({
+const machine = Machine<Context, Schema, Event>({
   key: "subscription",
   initial: "free",
   context: { provider: undefined },
@@ -80,6 +80,7 @@ const maschine = Machine<Context, Schema, Event>({
           on: {
             EXPIRE: "#subscription.expired",
             RETAIN: "autoRenewing",
+            RESTART: "autoRenewing",
           },
         },
         inGracePeriod: {
@@ -92,3 +93,37 @@ const maschine = Machine<Context, Schema, Event>({
     },
   },
 });
+
+const service = interpret(machine).onTransition((state, event) => {
+  console.log(event.type);
+});
+
+const initialState = "free";
+
+// Start the service
+service.start(initialState);
+console.log(service.state.value);
+
+const events: Event[] = [
+  { type: "START" },
+  { type: "RENEW" },
+  { type: "RENEW" },
+  { type: "CANCEL" },
+  { type: "RESTART" },
+  { type: "RENEW" },
+  { type: "RENEW" },
+  { type: "BILLING_ERROR" },
+  { type: "RECOVER" },
+  { type: "BILLING_ERROR" },
+  { type: "GRACE_PERIOD_END" },
+  { type: "FAILED_TO_RECOVER" },
+];
+
+// Send events
+events.forEach((e) => {
+  service.send(e);
+  console.log(service.state.value);
+});
+
+// Stop the service when you are no longer using it.
+service.stop();
